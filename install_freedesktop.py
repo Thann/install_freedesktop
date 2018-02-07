@@ -14,6 +14,7 @@
 
 from setuptools.command.install import install
 import os
+import re
 from distutils import log
 from distutils.core import Command
 from distutils.errors import DistutilsSetupError
@@ -29,6 +30,9 @@ install.sub_commands.extend([
     ('install_desktop', lambda self: True),
 #    ('install_icons', lambda self: True),
 ])
+
+# Validate Dbus "well-known name" format
+valid_filename = re.compile('^[a-zA-Z-_][a-zA-Z0-9-_]*(\.[a-zA-Z-_][a-zA-Z0-9-_]*)+$')
 
 class install_desktop(Command):
 
@@ -85,11 +89,15 @@ class install_desktop(Command):
             data['Type'] = 'Application'
             data['Exec'] = os.path.join(target_script_dir, script)
             dest_dir = os.path.join(self.data_dir, 'share/applications')
-            dest_file = os.path.join(dest_dir, data['Name'] + '.desktop')
+            filename = data.pop('filename', data['Name'])
+            if not valid_filename.match(filename) and len(filename) <= 255:
+                log.warn('WARNING: non-standard filename for .desktop file!');
+            dest_file = os.path.join(dest_dir, filename + '.desktop')
             self.mkpath(dest_dir)
             log.info('writing ' + dest_file)
             with open(dest_file, 'w') as f:
-                f.write('[Desktop Entry]\n')
+                f.write('#!/usr/bin/env xdg-open\n'
+                        '[Desktop Entry]\n')
                 for key, value in sorted(data.items()):
                     f.write('%s=%s\n' % (key, value))
             os.chmod(dest_file, 0o777 - current_umask())
